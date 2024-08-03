@@ -1,0 +1,14 @@
+{
+  "name": "vpn-project",
+  "version": "1.0.0",
+  "description": "OpenVPN client setup and management",
+  "main": "main.js",
+  "scripts": {
+    "start": "node main.js",
+    "dev": "nodemon main.js"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  }
+}

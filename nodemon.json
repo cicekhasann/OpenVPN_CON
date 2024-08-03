@@ -1,0 +1,7 @@
+{
+    "watch": ["main.js", "src"],
+    "ext": "js",
+    "ignore": ["*.log"],
+    "exec": "node main.js"
+  }
+  
