@@ -1,54 +1,38 @@
 const { exec } = require('child_process');
+const util = require('util');
+
+const execPromise = util.promisify(exec);
 
 async function deleteNamespace(namespace) {
-  return new Promise((resolve, reject) => {
-    exec(`sudo ip netns delete ${namespace}`, (error, stdout, stderr) => {
-      if (error && !stderr.includes("No such file or directory")) {
-        reject(`Error deleting namespace: ${stderr}`);
-      } else {
-        console.log(`Deleted namespace: ${namespace}`);
-        resolve();
-      }
-    });
-  });
+  try {
+    await execPromise(`sudo ip netns delete ${namespace}`);
+    console.log(`Deleted namespace: ${namespace}`);
+  } catch (error) {
+    if (!error.stderr.includes("No such file or directory")) {
+      throw new Error(`Error deleting namespace: ${error.stderr}`);
+    }
+    console.log(`Namespace ${namespace} does not exist.`);
+  }
 }
 
 async function createNamespace(namespace) {
   try {
     await deleteNamespace(namespace);
     console.log(`Creating namespace: ${namespace}`);
-    return new Promise((resolve, reject) => {
-      exec(`sudo ip netns add ${namespace}`, (error, stdout, stderr) => {
-        if (error) {
-          reject(`Error creating namespace: ${stderr}`);
-        } else {
-          resolve();
-        }
-      });
-    });
+    await execPromise(`sudo ip netns add ${namespace}`);
   } catch (error) {
-    console.error(error);
-    throw error;
+    throw new Error(`Error creating namespace: ${error.message}`);
   }
 }
 
 async function configureIp(namespace, ip) {
-  return new Promise((resolve, reject) => {
+  try {
     console.log(`Configuring IP ${ip} for namespace: ${namespace}`);
-    exec(`sudo ip netns exec ${namespace} ip addr add ${ip}/24 dev lo`, (error, stdout, stderr) => {
-      if (error) {
-        reject(`Error configuring IP: ${stderr}`);
-      } else {
-        exec(`sudo ip netns exec ${namespace} ip link set dev lo up`, (error, stdout, stderr) => {
-          if (error) {
-            reject(`Error setting up link: ${stderr}`);
-          } else {
-            resolve();
-          }
-        });
-      }
-    });
-  });
+    await execPromise(`sudo ip netns exec ${namespace} ip addr add ${ip}/24 dev lo`);
+    await execPromise(`sudo ip netns exec ${namespace} ip link set dev lo up`);
+  } catch (error) {
+    throw new Error(`Error configuring IP for ${namespace}: ${error.message}`);
+  }
 }
 
 async function prepareClients(ipBlock, ipStart, numClients) {
@@ -73,10 +57,21 @@ async function prepareClients(ipBlock, ipStart, numClients) {
       }
     }
   } catch (error) {
-    console.error('Error during preparation:', error);
+    console.error('Error during preparation:', error.message);
   }
   console.log(`Preparation completed for ${numClients} clients.`);
   return namespaces;
 }
 
-module.exports = { prepareClients };
+
+async function configureRouting(ipBlock, iface) {
+  try {
+    const route = `${ipBlock}.0.0/16`;
+    await execPromise(`sudo ip route add ${route} dev ${iface}`);
+    console.log(`Static route configured for ${route} via ${iface}`);
+  } catch (error) {
+    console.error('Error configuring routing:', error.message);
+  }
+}
+
+module.exports = { prepareClients, configureRouting };

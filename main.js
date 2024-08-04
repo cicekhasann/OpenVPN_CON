@@ -1,7 +1,7 @@
 const readline = require('readline');
-const { startAllConnections } = require('./baglanti'); // Ensure correct path
-const { prepareClients } = require('./hazirlik'); // Ensure correct path
-const { cleanUpNamespaces } = require('./temizlik');
+const { startAllConnections } = require('./baglanti');
+const { prepareClients, configureRouting } = require('./hazirlik');
+const { cleanUp } = require('./temizlik');
 const { exec } = require('child_process');
 const util = require('util');
 
@@ -10,10 +10,8 @@ const rl = readline.createInterface({
   output: process.stdout
 });
 
-// Promisify exec for easier use with async/await
 const execPromise = util.promisify(exec);
 
-// Function to detect the default network interface
 async function getDefaultNetworkInterface() {
   try {
     const { stdout } = await execPromise('ip route show default');
@@ -29,27 +27,21 @@ async function getDefaultNetworkInterface() {
   }
 }
 
-// Function to configure NAT
-async function configureNAT(interface) {
+async function enableIPForwarding(interface) {
   try {
-    // Flush existing NAT rules
-    await execPromise('sudo iptables -t nat -F');
-    
-    // Apply NAT rules
-    await execPromise(`sudo iptables -t nat -A POSTROUTING -o ${interface} -j MASQUERADE`);
-    
-    // Enable IP forwarding
     await execPromise('sudo sysctl -w net.ipv4.ip_forward=1');
-    
+    console.log('IP forwarding enabled');
+    await execPromise(`sudo iptables -t nat -A POSTROUTING -o ${interface} -j MASQUERADE`);
     console.log(`NAT configured using interface ${interface}`);
   } catch (error) {
-    console.error('Error configuring NAT:', error.message);
+    console.error('Error configuring IP forwarding and NAT:', error.message);
   }
 }
 
 async function handleOption(option) {
   switch (option) {
     case '1':
+
       const ipBlock = await new Promise(resolve => {
         rl.question('IP bloğunu girin (örneğin, 192.168): ', resolve);
       });
@@ -59,14 +51,22 @@ async function handleOption(option) {
       const numClients = parseInt(await new Promise(resolve => {
         rl.question('Müşteri sayısını girin: ', resolve);
       }), 10);
+      
       const namespaces = await prepareClients(ipBlock, ipStart, numClients);
-      rl.namespaces = namespaces; // Save namespaces to readline instance
+      rl.namespaces = namespaces; 
 
-      // Configure NAT automatically
+
       const interface = await getDefaultNetworkInterface();
-      await configureNAT(interface);
+      await enableIPForwarding(interface);
+
+      const routeIP = await new Promise(resolve => {
+        rl.question('Statik yönlendirme IP adresini girin (örneğin, 192.168.0.0/16): ', resolve);
+      });
+      await configureRouting(routeIP);
+
       break;
     case '2':
+      // Start all connections
       const ovpnPath = await new Promise(resolve => {
         rl.question('OVPN dosyasının yolunu girin: ', resolve);
       });
@@ -77,13 +77,15 @@ async function handleOption(option) {
       }
       break;
     case '3':
+      // Clean up
       try {
-        await cleanUpNamespaces();
+        await cleanUp();
       } catch (error) {
-        console.error('Temizlik yaparken bir hata oluştu:', error.message);
+        console.error('Error during cleanup:', error.message);
       }
       break;
     case '4':
+      // Exit
       rl.close();
       process.exit(0);
       break;
@@ -91,7 +93,7 @@ async function handleOption(option) {
       console.log('Geçersiz seçenek.');
       break;
   }
-  main(); // Continue to the next prompt
+  main(); 
 }
 
 function main() {
@@ -99,7 +101,7 @@ function main() {
   console.log('2. Eşzamanlı Oturumları Başlat');
   console.log('3. Temizlik Yap');
   console.log('4. Çıkış');
-  
+
   rl.question('Bir seçenek seçin: ', async (option) => {
     await handleOption(option);
   });
