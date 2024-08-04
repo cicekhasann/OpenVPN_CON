@@ -10,6 +10,7 @@ const rl = readline.createInterface({
   output: process.stdout
 });
 
+// Promisify exec for easier use with async/await
 const execPromise = util.promisify(exec);
 
 async function getDefaultNetworkInterface() {
@@ -27,9 +28,10 @@ async function getDefaultNetworkInterface() {
   }
 }
 
+// Function to enable IP forwarding for a specific interface
 async function enableIPForwarding(interface) {
   try {
-    await execPromise('sudo sysctl -w net.ipv4.ip_forward=1');
+    await execPromise(`sudo sysctl -w net.ipv4.ip_forward=1`);
     console.log('IP forwarding enabled');
     await execPromise(`sudo iptables -t nat -A POSTROUTING -o ${interface} -j MASQUERADE`);
     console.log(`NAT configured using interface ${interface}`);
@@ -38,10 +40,19 @@ async function enableIPForwarding(interface) {
   }
 }
 
+// Function to configure static routing
+async function configureRouting(routeIP) {
+  try {
+    await execPromise(`sudo ip route add ${routeIP} dev lo`);
+    console.log(`Static route added: ${routeIP}`);
+  } catch (error) {
+    console.error('Error configuring routing:', error.message);
+  }
+}
+
 async function handleOption(option) {
   switch (option) {
     case '1':
-
       const ipBlock = await new Promise(resolve => {
         rl.question('IP bloğunu girin (örneğin, 192.168): ', resolve);
       });
@@ -51,14 +62,14 @@ async function handleOption(option) {
       const numClients = parseInt(await new Promise(resolve => {
         rl.question('Müşteri sayısını girin: ', resolve);
       }), 10);
-      
       const namespaces = await prepareClients(ipBlock, ipStart, numClients);
-      rl.namespaces = namespaces; 
+      rl.namespaces = namespaces; // Save namespaces to readline instance
 
-
+      // Configure IP forwarding and NAT
       const interface = await getDefaultNetworkInterface();
       await enableIPForwarding(interface);
 
+      // Ask for static routing if necessary
       const routeIP = await new Promise(resolve => {
         rl.question('Statik yönlendirme IP adresini girin (örneğin, 192.168.0.0/16): ', resolve);
       });
@@ -66,7 +77,6 @@ async function handleOption(option) {
 
       break;
     case '2':
-      // Start all connections
       const ovpnPath = await new Promise(resolve => {
         rl.question('OVPN dosyasının yolunu girin: ', resolve);
       });
@@ -77,7 +87,6 @@ async function handleOption(option) {
       }
       break;
     case '3':
-      // Clean up
       try {
         await cleanUp();
       } catch (error) {
@@ -85,7 +94,6 @@ async function handleOption(option) {
       }
       break;
     case '4':
-      // Exit
       rl.close();
       process.exit(0);
       break;
@@ -93,7 +101,7 @@ async function handleOption(option) {
       console.log('Geçersiz seçenek.');
       break;
   }
-  main(); 
+  main(); // Continue to the next prompt
 }
 
 function main() {
