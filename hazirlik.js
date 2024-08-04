@@ -36,38 +36,46 @@ async function configureIp(namespace, ip) {
 }
 
 async function prepareClients(ipBlock, ipStart, numClients) {
-  let namespaces = [];
-  let currentBlock = parseInt(ipBlock.split('.').pop(), 10);
-  let currentIp = parseInt(ipStart, 10);
+  const [baseIP, thirdOctetStart] = ipBlock.split('.');
+  let ipStartNum = parseInt(ipStart, 10);
+  const namespaces = [];
+  const baseIPWithDot = `${baseIP}.`;
+  
+  let currentThirdOctet = parseInt(thirdOctetStart, 10);
 
-  console.log(`Starting preparation for ${numClients} clients.`);
-  try {
-    for (let i = 0; i < numClients; i++) {
-      const namespace = `vpnns${i}`;
-      const ip = `${ipBlock}.${currentBlock}.${currentIp}`;
-      await createNamespace(namespace);
-      await configureIp(namespace, ip);
-      namespaces.push(namespace);
-      console.log(`Created namespace ${namespace} with IP ${ip}`);
+  let currentFourthOctet = parseInt(ipStart, 10);
 
-      currentIp++;
-      if (currentIp > 254) {
-        currentIp = 1;
-        currentBlock++;
-      }
+  for (let i = 0; i < numClients; i++) {
+    const namespaceName = `vpnns${i}`;
+    namespaces.push(namespaceName);
+
+    // Determine IP address
+    const ipAddress = `${baseIP}.${currentThirdOctet}.${currentFourthOctet}`;    // Create and configure namespace
+    console.log(`Creating namespace ${namespaceName}`);
+    await execPromise(`sudo ip netns add ${namespaceName}`);
+    
+    console.log(`Configuring IP ${ipAddress} for namespace ${namespaceName}`);
+    await execPromise(`sudo ip netns exec ${namespaceName} ip addr add ${ipAddress}/24 dev lo`);
+    await execPromise(`sudo ip netns exec ${namespaceName} ip link set lo up`);
+    
+    currentFourthOctet += 1;
+
+    // If the fourth octet reaches 255, reset and increment the third octet
+    if (currentFourthOctet > 254) {
+      currentFourthOctet = 1;
+      currentThirdOctet += 1;
+
     }
-  } catch (error) {
-    console.error('Error during preparation:', error.message);
   }
-  console.log(`Preparation completed for ${numClients} clients.`);
+
   return namespaces;
 }
 
 
-async function configureRouting(routeIP) {
+async function configureRouting(destination, gateway, iface) {
   try {
-    await execPromise(`sudo ip route add ${routeIP} dev lo`);
-    console.log(`Static route added: ${routeIP}`);
+    await execPromise(`sudo ip route add ${destination} via ${gateway} dev ${iface}`);
+    console.log(`Static route added: ${destination} via ${gateway} dev ${iface}`);
   } catch (error) {
     console.error('Error configuring routing:', error.message);
   }
