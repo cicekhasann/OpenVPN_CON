@@ -1,19 +1,18 @@
 const { exec } = require('child_process');
 
-// Function to delete a namespace
 async function deleteNamespace(namespace) {
   return new Promise((resolve, reject) => {
     exec(`sudo ip netns delete ${namespace}`, (error, stdout, stderr) => {
       if (error && !stderr.includes("No such file or directory")) {
         reject(`Error deleting namespace: ${stderr}`);
       } else {
+        console.log(`Deleted namespace: ${namespace}`);
         resolve();
       }
     });
   });
 }
 
-// Function to create a namespace
 async function createNamespace(namespace) {
   try {
     await deleteNamespace(namespace);
@@ -29,11 +28,10 @@ async function createNamespace(namespace) {
     });
   } catch (error) {
     console.error(error);
-    throw error; // Rethrow to ensure errors propagate
+    throw error;
   }
 }
 
-// Function to configure IP for a namespace
 async function configureIp(namespace, ip) {
   return new Promise((resolve, reject) => {
     console.log(`Configuring IP ${ip} for namespace: ${namespace}`);
@@ -53,18 +51,26 @@ async function configureIp(namespace, ip) {
   });
 }
 
-// Function to prepare namespaces and IPs for multiple clients
 async function prepareClients(ipBlock, ipStart, numClients) {
   let namespaces = [];
+  let currentBlock = parseInt(ipBlock.split('.').pop(), 10);
+  let currentIp = parseInt(ipStart, 10);
+
   console.log(`Starting preparation for ${numClients} clients.`);
   try {
     for (let i = 0; i < numClients; i++) {
       const namespace = `vpnns${i}`;
-      const ip = `${ipBlock}.${parseInt(ipStart) + i}`;
+      const ip = `${ipBlock}.${currentBlock}.${currentIp}`;
       await createNamespace(namespace);
       await configureIp(namespace, ip);
-      namespaces.push({ namespace, ip });
+      namespaces.push(namespace);
       console.log(`Created namespace ${namespace} with IP ${ip}`);
+
+      currentIp++;
+      if (currentIp > 254) {
+        currentIp = 1;
+        currentBlock++;
+      }
     }
   } catch (error) {
     console.error('Error during preparation:', error);
@@ -73,17 +79,4 @@ async function prepareClients(ipBlock, ipStart, numClients) {
   return namespaces;
 }
 
-// Function to clean up namespaces
-async function cleanUpNamespaces() {
-  const namespaces = ['vpnns0', 'vpnns1']; // List your namespaces here
-  for (const namespace of namespaces) {
-    try {
-      await deleteNamespace(namespace);
-      console.log(`Deleted namespace: ${namespace}`);
-    } catch (error) {
-      console.error(`Error deleting namespace ${namespace}: ${error}`);
-    }
-  }
-}
-
-module.exports = { prepareClients, cleanUpNamespaces };
+module.exports = { prepareClients };
