@@ -40,16 +40,6 @@ async function enableIPForwarding(interface) {
   }
 }
 
-// Function to configure static routing
-async function configureRouting(routeIP) {
-  try {
-    await execPromise(`sudo ip route add ${routeIP} dev lo`);
-    console.log(`Static route added: ${routeIP}`);
-  } catch (error) {
-    console.error('Error configuring routing:', error.message);
-  }
-}
-
 async function handleOption(option) {
   switch (option) {
     case '1':

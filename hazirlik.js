@@ -64,11 +64,10 @@ async function prepareClients(ipBlock, ipStart, numClients) {
 }
 
 
-async function configureRouting(ipBlock, iface) {
+async function configureRouting(routeIP) {
   try {
-    const route = `${ipBlock}.0.0/16`;
-    await execPromise(`sudo ip route add ${route} dev ${iface}`);
-    console.log(`Static route configured for ${route} via ${iface}`);
+    await execPromise(`sudo ip route add ${routeIP} dev lo`);
+    console.log(`Static route added: ${routeIP}`);
   } catch (error) {
     console.error('Error configuring routing:', error.message);
   }
